@@ -201,6 +201,9 @@ class Obsidian():
     def get_recent_periodic_notes(self, period: str, limit: int = 5, include_content: bool = False) -> Any:
         """Get most recent periodic notes for the specified period type.
         
+        This implementation makes multiple calls to get periodic notes for specific dates,
+        working backwards from today.
+        
         Args:
             period: The period type (daily, weekly, monthly, quarterly, yearly)
             limit: Maximum number of notes to return (default: 5)
@@ -209,25 +212,97 @@ class Obsidian():
         Returns:
             List of recent periodic notes
         """
-        url = f"{self.get_base_url()}/periodic/{period}/recent"
-        params = {
-            "limit": limit,
-            "includeContent": include_content
-        }
+        from datetime import datetime, timedelta
+        import calendar
         
-        def call_fn():
-            response = requests.get(
-                url, 
-                headers=self._get_headers(), 
-                params=params,
-                verify=self.verify_ssl, 
-                timeout=self.timeout
-            )
-            response.raise_for_status()
-            
-            return response.json()
-
-        return self._safe_call(call_fn)
+        results = []
+        today = datetime.now()
+        
+        # Calculate dates for each period type
+        for i in range(limit):
+            try:
+                # Calculate the date/period identifier and URL based on period type
+                if period == "daily":
+                    target_date = today - timedelta(days=i)
+                    year = target_date.strftime("%Y")
+                    month = target_date.strftime("%m")
+                    day = target_date.strftime("%d")
+                    url = f"{self.get_base_url()}/periodic/{period}/{year}/{month}/{day}/"
+                    date_str = target_date.strftime("%Y-%m-%d")
+                elif period == "weekly":
+                    target_date = today - timedelta(weeks=i)
+                    # Get ISO week number
+                    year, week, _ = target_date.isocalendar()
+                    url = f"{self.get_base_url()}/periodic/{period}/{year}/W{week:02d}/"
+                    date_str = f"{year}-W{week:02d}"
+                elif period == "monthly":
+                    # Calculate month offset
+                    year = today.year
+                    month = today.month - i
+                    while month <= 0:
+                        month += 12
+                        year -= 1
+                    url = f"{self.get_base_url()}/periodic/{period}/{year}/{month:02d}/"
+                    date_str = f"{year}-{month:02d}"
+                elif period == "quarterly":
+                    # Calculate quarter offset
+                    current_quarter = (today.month - 1) // 3 + 1
+                    year = today.year
+                    quarter = current_quarter - i
+                    while quarter <= 0:
+                        quarter += 4
+                        year -= 1
+                    url = f"{self.get_base_url()}/periodic/{period}/{year}/Q{quarter}/"
+                    date_str = f"{year}-Q{quarter}"
+                elif period == "yearly":
+                    year = today.year - i
+                    url = f"{self.get_base_url()}/periodic/{period}/{year}/"
+                    date_str = str(year)
+                else:
+                    raise ValueError(f"Invalid period: {period}")
+                
+                def call_fn():
+                    headers = self._get_headers()
+                    if include_content:
+                        # Request full note data if content is needed
+                        headers['Accept'] = 'application/vnd.olrapi.note+json'
+                    
+                    response = requests.get(
+                        url, 
+                        headers=headers,
+                        verify=self.verify_ssl, 
+                        timeout=self.timeout
+                    )
+                    
+                    # If 404, the note doesn't exist for this date
+                    if response.status_code == 404:
+                        return None
+                        
+                    response.raise_for_status()
+                    
+                    # Parse response based on whether we requested JSON
+                    if include_content:
+                        # We requested JSON format with metadata and content
+                        data = response.json()
+                        data["date"] = date_str
+                        return data
+                    else:
+                        # Just return basic info with the path
+                        return {
+                            "date": date_str,
+                            "path": response.text.strip(),
+                            "exists": True
+                        }
+                
+                result = self._safe_call(call_fn)
+                if result:
+                    results.append(result)
+                    
+            except Exception as e:
+                # Log error but continue trying other dates
+                continue
+        
+        return results
     
     def get_recent_changes(self, limit: int = 10, days: int = 90) -> Any:
         """Get recently modified files in the vault.
