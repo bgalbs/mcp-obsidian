@@ -286,6 +286,46 @@ class PatchContentToolHandler(ToolHandler):
                text=f"Successfully patched content in {args['filepath']}"
            )
        ]
+       
+class PutContentToolHandler(ToolHandler):
+   def __init__(self):
+       super().__init__("obsidian_put_content")
+
+   def get_tool_description(self):
+       return Tool(
+           name=self.name,
+           description="Create a new file in your vault or update the content of an existing one in your vault.",
+           inputSchema={
+               "type": "object",
+               "properties": {
+                   "filepath": {
+                       "type": "string",
+                       "description": "Path to the relevant file (relative to your vault root)",
+                       "format": "path"
+                   },
+                   "content": {
+                       "type": "string",
+                       "description": "Content of the file you would like to upload"
+                   }
+               },
+               "required": ["filepath", "content"]
+           }
+       )
+
+   def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
+       if "filepath" not in args or "content" not in args:
+           raise RuntimeError("filepath and content arguments required")
+
+       api = obsidian.Obsidian(api_key=api_key, host=obsidian_host)
+       api.put_content(args.get("filepath", ""), args["content"])
+
+       return [
+           TextContent(
+               type="text",
+               text=f"Successfully uploaded content to {args['filepath']}"
+           )
+       ]
+   
 
 class DeleteFileToolHandler(ToolHandler):
    def __init__(self):
@@ -341,13 +381,39 @@ class ComplexSearchToolHandler(ToolHandler):
            Supports standard JsonLogic operators plus 'glob' and 'regexp' for pattern matching. Results must be non-falsy.
 
            Use this tool when you want to do a complex search, e.g. for all documents with certain tags etc.
+           ALWAYS follow query syntax in examples.
+
+           Examples
+            1. Match all markdown files
+            {"glob": ["*.md", {"var": "path"}]}
+
+            2. Match all markdown files with 1221 substring inside them
+            {
+              "and": [
+                { "glob": ["*.md", {"var": "path"}] },
+                { "regexp": [".*1221.*", {"var": "content"}] }
+              ]
+            }
+
+            3. Match all markdown files in Work folder containing name Keaton
+            {
+              "and": [
+                { "glob": ["*.md", {"var": "path"}] },
+                { "regexp": [".*Work.*", {"var": "path"}] },
+                { "regexp": ["Keaton", {"var": "content"}] }
+              ]
+            }
            """,
            inputSchema={
                "type": "object",
                "properties": {
                    "query": {
                        "type": "object",
-                       "description": "JsonLogic query object. Example: {\"glob\": [\"*.md\", {\"var\": \"path\"}]} matches all markdown files"
+                       "description": "JsonLogic query object. ALWAYS follow query syntax in examples. \
+                            Example 1: {\"glob\": [\"*.md\", {\"var\": \"path\"}]} matches all markdown files \
+                            Example 2: {\"and\": [{\"glob\": [\"*.md\", {\"var\": \"path\"}]}, {\"regexp\": [\".*1221.*\", {\"var\": \"content\"}]}]} matches all markdown files with 1221 substring inside them \
+                            Example 3: {\"and\": [{\"glob\": [\"*.md\", {\"var\": \"path\"}]}, {\"regexp\": [\".*Work.*\", {\"var\": \"path\"}]}, {\"regexp\": [\"Keaton\", {\"var\": \"content\"}]}]} matches all markdown files in Work folder containing name Keaton \
+                        "
                    }
                },
                "required": ["query"]
