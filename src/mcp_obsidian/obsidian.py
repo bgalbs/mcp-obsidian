@@ -116,6 +116,10 @@ class Obsidian():
     def append_content(self, filepath: str, content: str) -> Any:
         url = f"{self.get_base_url()}/vault/{filepath}"
         
+        # Ensure content ends with a newline to prevent subsequent sections from being appended
+        if content and not content.endswith('\n'):
+            content = content + '\n'
+        
         def call_fn():
             response = requests.post(
                 url, 
@@ -131,6 +135,10 @@ class Obsidian():
     
     def patch_content(self, filepath: str, operation: str, target_type: str, target: str, content: str) -> Any:
         url = f"{self.get_base_url()}/vault/{filepath}"
+        
+        # Ensure content ends with a newline to prevent subsequent sections from being appended
+        if content and not content.endswith('\n'):
+            content = content + '\n'
         
         headers = self._get_headers() | {
             'Content-Type': 'text/markdown',
@@ -148,6 +156,10 @@ class Obsidian():
 
     def put_content(self, filepath: str, content: str) -> Any:
         url = f"{self.get_base_url()}/vault/{filepath}"
+        
+        # Ensure content ends with a newline for proper markdown formatting
+        if content and not content.endswith('\n'):
+            content = content + '\n'
         
         def call_fn():
             response = requests.put(
