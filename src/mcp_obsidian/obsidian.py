@@ -136,9 +136,13 @@ class Obsidian():
     def patch_content(self, filepath: str, operation: str, target_type: str, target: str, content: str) -> Any:
         url = f"{self.get_base_url()}/vault/{filepath}"
         
-        # Ensure content ends with a newline to prevent subsequent sections from being appended
-        if content and not content.endswith('\n'):
-            content = content + '\n'
+        # Ensure content ends with double newlines to create a proper paragraph break
+        # This prevents the next section from being interpreted as a list item
+        if content and not content.endswith('\n\n'):
+            if content.endswith('\n'):
+                content = content + '\n'
+            else:
+                content = content + '\n\n'
         
         headers = self._get_headers() | {
             'Content-Type': 'text/markdown',
